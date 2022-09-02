@@ -1,0 +1,24 @@
+^C:\USERS\TEST\DESKTOP\FLAMETEST\CMAKEFILES\C95497EEC8E253630D85D6868283AB17\GENERATEVERSION.RULE
+setlocal
+cd C:\Users\Test\Desktop\FlameTest\src
+if %errorlevel% neq 0 goto :cmEnd
+C:
+if %errorlevel% neq 0 goto :cmEnd
+"C:\Program Files\CMake\bin\cmake.exe" -D GENERATE_VERSION_SOURCE_DIR=C:/Users/Test/Desktop/FlameTest/src -D GENERATE_VERSION_BINARY_DIR=C:/Users/Test/Desktop/FlameTest/src -D VERSION_STRING=5.7.0 -D DEVELOPMENT_BUILD=false -P C:/Users/Test/Desktop/FlameTest/cmake/Modules/GenerateVersion.cmake
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
+^C:\USERS\TEST\DESKTOP\FLAMETEST\SRC\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Test/Desktop/FlameTest -BC:/Users/Test/Desktop/FlameTest --check-stamp-file C:/Users/Test/Desktop/FlameTest/src/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
