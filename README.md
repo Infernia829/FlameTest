@@ -51,7 +51,7 @@ Some can be changed in the key config dialog in the settings tab.
 | Shift                         | Sneak/move down                                                |
 | Q                             | Drop itemstack                                                 |
 | Shift + Q                     | Drop single item                                               |
-| Left mouse button             | Dig/punch/take item                                            |
+| Left mouse button             | Dig/punch/use                                                  |
 | Right mouse button            | Place/use                                                      |
 | Shift + right mouse button    | Build (without using)                                          |
 | I                             | Inventory menu                                                 |
@@ -256,7 +256,6 @@ General options and their default values:
     ENABLE_CURL=ON             - Build with cURL; Enables use of online mod repo, public serverlist and remote media fetching via http
     ENABLE_CURSES=ON           - Build with (n)curses; Enables a server side terminal (command line option: --terminal)
     ENABLE_GETTEXT=ON          - Build with Gettext; Allows using translations
-    ENABLE_GLES=OFF            - Enable extra support code for OpenGL ES (requires support by IrrlichtMt)
     ENABLE_LEVELDB=ON          - Build with LevelDB; Enables use of LevelDB map backend
     ENABLE_POSTGRESQL=ON       - Build with libpq; Enables use of PostgreSQL map backend (PostgreSQL 9.5 or greater recommended)
     ENABLE_REDIS=ON            - Build with libhiredis; Enables use of Redis map backend

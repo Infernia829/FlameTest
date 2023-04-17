@@ -9,7 +9,7 @@ endif()
 
 # This can be read from ${PROJECT_NAME} after project() is called
 project(minetest)
-set(PROJECT_NAME_CAPITALIZED "Minetest")
+set(PROJECT_NAME_CAPITALIZED "FlameTest")
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
@@ -23,7 +23,7 @@ set(VERSION_PATCH 0)
 set(VERSION_EXTRA "" CACHE STRING "Stuff to append to version string")
 
 # Change to false for releases
-set(DEVELOPMENT_BUILD FALSE)
+set(DEVELOPMENT_BUILD TRUE)
 
 set(VERSION_STRING "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
 if(VERSION_EXTRA)
@@ -267,10 +267,10 @@ if(BUILD_CLIENT)
 endif()
 
 install(FILES "README.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/lua_api.txt" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/client_lua_api.txt" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/menu_lua_api.txt" DESTINATION "${DOCDIR}" COMPONENT "Docs")
-install(FILES "doc/texture_packs.txt" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+install(FILES "doc/lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+install(FILES "doc/client_lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+install(FILES "doc/menu_lua_api.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
+install(FILES "doc/texture_packs.md" DESTINATION "${DOCDIR}" COMPONENT "Docs")
 install(FILES "doc/world_format.txt" DESTINATION "${DOCDIR}" COMPONENT "Docs")
 install(FILES "minetest.conf.example" DESTINATION "${EXAMPLE_CONF_DIR}")
 
