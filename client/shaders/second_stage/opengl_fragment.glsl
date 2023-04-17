@@ -1,17 +1,16 @@
-uniform sampler2D baseTexture;
-uniform sampler2D normalTexture;
-uniform sampler2D ShadowMapSampler;
+#define rendered texture0
+#define bloom texture1
 
-uniform vec3 sunPositionScreen;
-uniform float sunBrightness;
-uniform vec3 moonPositionScreen;
-uniform float moonBrightness;
+struct ExposureParams {
+	float compensationFactor;
+};
 
-uniform vec3 dayLight;
+uniform sampler2D rendered;
+uniform sampler2D bloom;
 
-#define rendered baseTexture
-#define normalmap normalTexture
-#define depthmap ShadowMapSampler
+uniform ExposureParams exposureParams;
+uniform lowp float bloomIntensity;
+uniform lowp float saturation;
 
 #ifdef GL_ES
 varying mediump vec2 varTexCoord;
@@ -19,12 +18,26 @@ varying mediump vec2 varTexCoord;
 centroid varying vec2 varTexCoord;
 #endif
 
-const float far = 1000.;
-const float near = 1.;
-float mapDepth(float depth)
+#ifdef ENABLE_AUTO_EXPOSURE
+varying float exposure; // linear exposure factor, see vertex shader
+#endif
+
+#ifdef ENABLE_BLOOM
+
+vec4 applyBloom(vec4 color, vec2 uv)
 {
-	return min(1., 1. / (1.00001 - depth) / far);
+	vec3 light = texture2D(bloom, uv).rgb;
+#ifdef ENABLE_BLOOM_DEBUG
+	if (uv.x > 0.5 && uv.y < 0.5)
+		return vec4(light, color.a);
+	if (uv.x < 0.5)
+		return color;
+#endif
+	color.rgb = mix(color.rgb, light, bloomIntensity);
+	return color;
 }
+
+#endif
 
 #if ENABLE_TONE_MAPPING
 
@@ -46,64 +59,61 @@ vec3 uncharted2Tonemap(vec3 x)
 
 vec4 applyToneMapping(vec4 color)
 {
-	color = vec4(pow(color.rgb, vec3(2.2)), color.a);
-	const float gamma = 1.6;
-	const float exposureBias = 5.5;
+	const float exposureBias = 2.0;
 	color.rgb = uncharted2Tonemap(exposureBias * color.rgb);
 	// Precalculated white_scale from
 	//vec3 whiteScale = 1.0 / uncharted2Tonemap(vec3(W));
 	vec3 whiteScale = vec3(1.036015346);
 	color.rgb *= whiteScale;
-	return vec4(pow(color.rgb, vec3(1.0 / gamma)), color.a);
+	return color;
+}
+
+vec3 applySaturation(vec3 color, float factor)
+{
+	// Calculate the perceived luminosity from the RGB color.
+	// See also: https://www.w3.org/WAI/GL/wiki/Relative_luminance
+	float brightness = dot(color, vec3(0.2125, 0.7154, 0.0721));
+	return mix(vec3(brightness), color, factor);
 }
 #endif
-
-float noise(vec3 uvd) {
-	return fract(dot(sin(uvd * vec3(13041.19699, 27723.29171, 61029.77801)), vec3(73137.11101, 37312.92319, 10108.89991)));
-}
-
-float sampleVolumetricLight(vec2 uv, vec3 lightVec, float rawDepth)
-{
-	lightVec = 0.5 * lightVec / lightVec.z + 0.5;
-	float samples = 13.;
-	float result = 0.;
-	float bias = noise(vec3(uv, rawDepth));
-	vec2 samplepos;
-	for (float i = 0.; i < samples; i++) {
-		samplepos = mix(uv, lightVec.xy, (i + bias) / samples);
-		result += texture2D(depthmap, samplepos).r < 1. ? 0.0 : 1.0;
-	}
-	return result / samples;
-}
 
 void main(void)
 {
 	vec2 uv = varTexCoord.st;
 	vec4 color = texture2D(rendered, uv).rgba;
 
-	vec4 normal_and_sunlight = texture2D(normalmap, uv);
-	float rawDepth = texture2D(depthmap, uv).r;
-	float depth = mapDepth(rawDepth);
-	vec3 lookDirection = normalize(vec3(uv.x * 2. - 1., uv.y * 2. - 1., 1. / tan(36. / 180. * 3.141596)));
-	vec3 lightColor = pow(normal_and_sunlight.w, 2.) * dayLight;
-	float lightFactor = 0.;
+	// translate to linear colorspace (approximate)
+	color.rgb = pow(color.rgb, vec3(2.2));
 
-	if (sunPositionScreen.z > 0. && sunBrightness > 0.) {
-		lightFactor = sunBrightness * sampleVolumetricLight(uv, sunPositionScreen, rawDepth) * pow(clamp(dot(sunPositionScreen, vec3(0., 0., 1.)), 0.0, 0.7), 2.5);
-	}
-	else if (moonPositionScreen.z > 0. && moonBrightness > 0.) {
-		lightFactor = moonBrightness * sampleVolumetricLight(uv, moonPositionScreen, rawDepth) * pow(clamp(dot(moonPositionScreen, vec3(0., 0., 1.)), 0.0, 0.7), 2.5);
-	}
-	color.rgb = mix(color.rgb, lightColor, lightFactor);
-
-	// if (sunPositionScreen.z < 0.)
-	// 	color.rg += 1. - clamp(abs((2. * uv.xy - 1.) - sunPositionScreen.xy / sunPositionScreen.z) * 1000., 0., 1.);
-	// if (moonPositionScreen.z < 0.)
-	// 	color.rg += 1. - clamp(abs((2. * uv.xy - 1.) - moonPositionScreen.xy / moonPositionScreen.z) * 1000., 0., 1.);
-
-#if ENABLE_TONE_MAPPING
-	color = applyToneMapping(color);
+#ifdef ENABLE_BLOOM_DEBUG
+	if (uv.x > 0.5 || uv.y > 0.5)
 #endif
+	{
+		color.rgb *= exposureParams.compensationFactor;
+#ifdef ENABLE_AUTO_EXPOSURE
+		color.rgb *= exposure;
+#endif
+	}
+
+
+#ifdef ENABLE_BLOOM
+	color = applyBloom(color, uv);
+#endif
+
+#ifdef ENABLE_BLOOM_DEBUG
+	if (uv.x > 0.5 || uv.y > 0.5)
+#endif
+	{
+#if ENABLE_TONE_MAPPING
+		color = applyToneMapping(color);
+		color.rgb = applySaturation(color.rgb, saturation);
+#endif
+	}
+
+	color.rgb = clamp(color.rgb, vec3(0.), vec3(1.));
+
+	// return to sRGB colorspace (approximate)
+	color.rgb = pow(color.rgb, vec3(1.0 / 2.2));
 
 	gl_FragColor = vec4(color.rgb, 1.0); // force full alpha to avoid holes in the image.
 }

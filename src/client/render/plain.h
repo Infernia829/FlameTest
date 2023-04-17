@@ -38,6 +38,19 @@ private:
 	RenderTarget *m_target {nullptr};
 };
 
+class DrawWield : public RenderStep
+{
+public:
+	virtual void setRenderSource(RenderSource *) override {}
+	virtual void setRenderTarget(RenderTarget *target) override { m_target = target; }
+
+	virtual void reset(PipelineContext &context) override {}
+	virtual void run(PipelineContext &context) override;
+
+private:
+	RenderTarget *m_target {nullptr};
+};
+
 /**
  * Implements a pipeline step that renders the game HUD
  */
@@ -84,7 +97,6 @@ private:
 };
 
 std::unique_ptr<RenderStep> create3DStage(Client *client, v2f scale);
-v2f getDownscaleFactor();
 RenderStep* addUpscaling(RenderPipeline *pipeline, RenderStep *previousStep, v2f downscale_factor);
 
 void populatePlainPipeline(RenderPipeline *pipeline, Client *client);

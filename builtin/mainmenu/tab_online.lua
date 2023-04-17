@@ -77,7 +77,7 @@ local function get_formspec(tabview, name, tabdata)
 		"container_end[]" ..
 
 		"container[9.75,0]" ..
-		"box[0,0;5.75,7;#666666]" ..
+		"box[0,0;5.75,7.1;#666666]" ..
 
 		-- Address / Port
 		"label[0.25,0.35;" .. fgettext("Address") .. "]" ..
@@ -94,7 +94,7 @@ local function get_formspec(tabview, name, tabdata)
 		-- Name / Password
 		"container[0,4.8]" ..
 		"label[0.25,0;" .. fgettext("Name") .. "]" ..
-		"label[3,0;" .. fgettext("Password") .. "]" ..
+		"label[2.875,0;" .. fgettext("Password") .. "]" ..
 		"field[0.25,0.2;2.625,0.75;te_name;;" .. core.formspec_escape(core.settings:get("name")) .. "]" ..
 		"pwdfield[2.875,0.2;2.625,0.75;te_pwd;]" ..
 		"container_end[]" ..
@@ -148,7 +148,7 @@ local function get_formspec(tabview, name, tabdata)
 		"align=inline,padding=0.25,width=1.5;" ..
 		"color,align=inline,span=1;" ..
 		"text,align=inline,padding=1]" ..
-		"table[0.25,1;9.25,5.75;servers;"
+		"table[0.25,1;9.25,5.8;servers;"
 
 	local servers = get_sorted_servers()
 
@@ -180,7 +180,7 @@ local function get_formspec(tabview, name, tabdata)
 		retval = retval .. ";0]"
 	end
 
-	return retval, "size[15.5,7,false]real_coordinates[true]"
+	return retval, "size[15.5,7.1,false]real_coordinates[true]"
 end
 
 --------------------------------------------------------------------------------
@@ -346,12 +346,14 @@ local function main_button_handler(tabview, fields, name, tabdata)
 		return true
 	end
 
-	if (fields.btn_mp_login or fields.key_enter)
-			and fields.te_address ~= "" and fields.te_port then
+	local host_filled = (fields.te_address ~= "") and fields.te_port:match("^%s*[1-9][0-9]*%s*$")
+	local te_port_number = tonumber(fields.te_port)
+
+	if (fields.btn_mp_login or fields.key_enter) and host_filled then
 		gamedata.playername = fields.te_name
 		gamedata.password   = fields.te_pwd
 		gamedata.address    = fields.te_address
-		gamedata.port       = tonumber(fields.te_port)
+		gamedata.port       = te_port_number
 
 		local enable_split_login_register = core.settings:get_bool("enable_split_login_register")
 		gamedata.allow_login_or_register = enable_split_login_register and "login" or "any"
@@ -391,10 +393,10 @@ local function main_button_handler(tabview, fields, name, tabdata)
 		return true
 	end
 
-	if fields.btn_mp_register and fields.te_address ~= "" and fields.te_port then
+	if fields.btn_mp_register and host_filled then
 		local idx = core.get_table_index("servers")
 		local server = idx and tabdata.lookup[idx]
-		if server and (server.address ~= fields.te_address or server.port ~= tonumber(fields.te_port)) then
+		if server and (server.address ~= fields.te_address or server.port ~= te_port_number) then
 			server = nil
 		end
 
@@ -403,7 +405,7 @@ local function main_button_handler(tabview, fields, name, tabdata)
 			return true
 		end
 
-		local dlg = create_register_dialog(fields.te_address, tonumber(fields.te_port), server)
+		local dlg = create_register_dialog(fields.te_address, te_port_number, server)
 		dlg:set_parent(tabview)
 		tabview:hide()
 		dlg:show()

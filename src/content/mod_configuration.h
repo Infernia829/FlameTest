@@ -33,7 +33,7 @@ class ModConfiguration
 {
 public:
 	/**
-	 * @returns true if all dependencies are fullfilled.
+	 * @returns true if all dependencies are fulfilled.
 	 */
 	inline bool isConsistent() const { return m_unsatisfied_mods.empty(); }
 
@@ -73,7 +73,7 @@ public:
 	void addGameMods(const SubgameSpec &gamespec);
 
 	/**
-	 * Adds mods specifed by a world.mt config
+	 * Adds mods specified by a world.mt config
 	 *
 	 * @param settings_path Path to world.mt
 	 * @param modPaths Map from virtual name to mod path

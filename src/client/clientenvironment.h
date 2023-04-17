@@ -142,8 +142,9 @@ public:
 	{ m_camera_offset = camera_offset; }
 	v3s16 getCameraOffset() const { return m_camera_offset; }
 
-	void updateFrameTime();
+	void updateFrameTime(bool is_paused);
 	u64 getFrameTime() const { return m_frame_time; }
+	u64 getFrameTimeDelta() const { return m_frame_dtime; }
 
 private:
 	ClientMap *m_map;
@@ -157,5 +158,7 @@ private:
 	IntervalLimiter m_active_object_light_update_interval;
 	std::list<std::string> m_player_names;
 	v3s16 m_camera_offset;
-	u64 m_frame_time;
+	u64 m_frame_time = 0;
+	u64 m_frame_dtime = 0;
+	u64 m_frame_time_pause_accumulator = 0;
 };

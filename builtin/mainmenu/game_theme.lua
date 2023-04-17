@@ -126,9 +126,9 @@ function mm_game_theme.set_generic(identifier)
 	if mm_game_theme.defaulttexturedir ~= nil then
 		local path = mm_game_theme.defaulttexturedir .. DIR_DELIM .."menu_" ..
 										identifier .. ".png"
-		--if core.set_background(identifier,path) then
-		--	return true
-		--end
+		if core.set_background(identifier,path) then
+			return true
+		end
 	end
 
 	return false
@@ -181,9 +181,16 @@ end
 
 --------------------------------------------------------------------------------
 function mm_game_theme.set_dirt_bg()
+	if mm_game_theme.texturepack ~= nil then
+		local path = mm_game_theme.texturepack .. DIR_DELIM .."default_dirt.png"
+		if core.set_background("background", path, true, 128) then
+			return true
+		end
+	end
+
 	-- Use universal fallback texture in textures/base/pack
 	local minimalpath = defaulttexturedir .. "menu_bg.png"
-	core.set_background("background", minimalpath)
+	core.set_background("background", minimalpath, true, 128)
 end
 
 --------------------------------------------------------------------------------

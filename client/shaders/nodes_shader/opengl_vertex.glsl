@@ -18,7 +18,7 @@ varying vec3 worldPosition;
 varying lowp vec4 varColor;
 // The centroid keyword ensures that after interpolation the texture coordinates
 // lie within the same bounds when MSAA is en- and disabled.
-// This fixes the stripes problem with nearest-neighbour textures and MSAA.
+// This fixes the stripes problem with nearest-neighbor textures and MSAA.
 #ifdef GL_ES
 varying mediump vec2 varTexCoord;
 #else
@@ -241,7 +241,7 @@ void main(void)
 		float pFactor = getPerspectiveFactor(getRelativePosition(m_ShadowViewProj * mWorld * shadow_pos));
 		if (f_normal_length > 0.0) {
 			nNormal = normalize(vNormal);
-			cosLight = dot(nNormal, -v_LightDirection);
+			cosLight = max(1e-5, dot(nNormal, -v_LightDirection));
 			float sinLight = pow(1 - pow(cosLight, 2.0), 0.5);
 			normalOffsetScale = 2.0 * pFactor * pFactor * sinLight * min(f_shadowfar, 500.0) /
 					xyPerspectiveBias1 / f_textureresolution;

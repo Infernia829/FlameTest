@@ -24,19 +24,18 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "client/shader.h"
 #include "client/tile.h"
 
-PostProcessingStep::PostProcessingStep(video::E_MATERIAL_TYPE shader, const std::vector<u8> &_texture_map) :
-	texture_map(_texture_map)
+PostProcessingStep::PostProcessingStep(u32 _shader_id, const std::vector<u8> &_texture_map) :
+	shader_id(_shader_id), texture_map(_texture_map)
 {
 	assert(texture_map.size() <= video::MATERIAL_MAX_TEXTURES);
-	createMaterial(shader);
+	configureMaterial();
 }
 
-void PostProcessingStep::createMaterial(video::E_MATERIAL_TYPE shader)
+void PostProcessingStep::configureMaterial()
 {
 	material.UseMipMaps = false;
 	material.ZBuffer = true;
 	material.ZWriteEnable = video::EZW_ON;
-	material.MaterialType = shader;
 	for (u32 k = 0; k < texture_map.size(); ++k) {
 		material.TextureLayer[k].AnisotropicFilter = false;
 		material.TextureLayer[k].BilinearFilter = false;
@@ -65,14 +64,14 @@ void PostProcessingStep::run(PipelineContext &context)
 	if (target)
 		target->activate(context);
 
+	// attach the shader
+	material.MaterialType = context.client->getShaderSource()->getShaderInfo(shader_id).material;
+
 	auto driver = context.device->getVideoDriver();
 
-	for (u32 i = 0; i < MYMIN(texture_map.size(), video::MATERIAL_MAX_TEXTURES); i++)
+	for (u32 i = 0; i < texture_map.size(); i++)
 		material.TextureLayer[i].Texture = source->getTexture(texture_map[i]);
 
-	// driver->setTransform(video::ETS_VIEW, core::matrix4::EM4CONST_IDENTITY);
-	// driver->setTransform(video::ETS_PROJECTION, core::matrix4::EM4CONST_IDENTITY);
-	// driver->setTransform(video::ETS_WORLD, core::matrix4::EM4CONST_IDENTITY);
 	static const video::SColor color = video::SColor(0, 0, 0, 255);
 	static const video::S3DVertex vertices[4] = {
 			video::S3DVertex(1.0, -1.0, 0.0, 0.0, 0.0, -1.0,
@@ -89,35 +88,123 @@ void PostProcessingStep::run(PipelineContext &context)
 	driver->drawVertexPrimitiveList(&vertices, 4, &indices, 2);
 }
 
+void PostProcessingStep::setBilinearFilter(u8 index, bool value)
+{
+	assert(index < video::MATERIAL_MAX_TEXTURES);
+	material.TextureLayer[index].BilinearFilter = value;
+}
+
 RenderStep *addPostProcessing(RenderPipeline *pipeline, RenderStep *previousStep, v2f scale, Client *client)
 {
 	auto buffer = pipeline->createOwned<TextureBuffer>();
-	static const u8 TEXTURE_COLOR = 0;
-	static const u8 TEXTURE_NORMAL = 1;
-	static const u8 TEXTURE_DEPTH = 3;
+	auto driver = client->getSceneManager()->getVideoDriver();
 
-	// init post-processing buffer
-	buffer->setTexture(TEXTURE_COLOR, scale, "3d_render", video::ECF_A8R8G8B8);
-	buffer->setTexture(TEXTURE_NORMAL, scale, "3d_normal", video::ECF_A8R8G8B8);
+	// configure texture formats
+	video::ECOLOR_FORMAT color_format = video::ECF_A8R8G8B8;
+	if (driver->queryTextureFormat(video::ECF_A16B16G16R16F))
+		color_format = video::ECF_A16B16G16R16F;
 
 	video::ECOLOR_FORMAT depth_format = video::ECF_D16; // fallback depth format
-	auto driver = client->getSceneManager()->getVideoDriver();
 	if (driver->queryTextureFormat(video::ECF_D32))
 		depth_format = video::ECF_D32;
 	else if (driver->queryTextureFormat(video::ECF_D24S8))
 		depth_format = video::ECF_D24S8;
-	buffer->setDepthTexture(TEXTURE_DEPTH, scale, "3d_depthmap", depth_format);
+
+
+	// init post-processing buffer
+	static const u8 TEXTURE_COLOR = 0;
+	static const u8 TEXTURE_DEPTH = 1;
+	static const u8 TEXTURE_BLOOM = 2;
+	static const u8 TEXTURE_EXPOSURE_1 = 3;
+	static const u8 TEXTURE_EXPOSURE_2 = 4;
+	static const u8 TEXTURE_BLOOM_DOWN = 10;
+	static const u8 TEXTURE_BLOOM_UP = 20;
+
+	buffer->setTexture(TEXTURE_COLOR, scale, "3d_render", color_format);
+	buffer->setTexture(TEXTURE_EXPOSURE_1, core::dimension2du(1,1), "exposure_1", color_format, /*clear:*/ true);
+	buffer->setTexture(TEXTURE_EXPOSURE_2, core::dimension2du(1,1), "exposure_2", color_format, /*clear:*/ true);
+	buffer->setTexture(TEXTURE_DEPTH, scale, "3d_depthmap", depth_format);
 
 	// attach buffer to the previous step
-	previousStep->setRenderTarget(buffer);
+	previousStep->setRenderTarget(pipeline->createOwned<TextureBufferOutput>(buffer, std::vector<u8> { TEXTURE_COLOR }, TEXTURE_DEPTH));
+
+	// shared variables
+	u32 shader_id;
+
+	// Number of mipmap levels of the bloom downsampling texture
+	const u8 MIPMAP_LEVELS = 4;
+
+	const bool enable_bloom = g_settings->getBool("enable_bloom");
+	const bool enable_auto_exposure = g_settings->getBool("enable_auto_exposure");
 
 	// post-processing stage
-	// set up shader
-	IWritableShaderSource *s = client->getShaderSource();
-	u32 shader_index = s->getShader("second_stage", TILE_MATERIAL_BASIC, NDT_NORMAL);
-	video::E_MATERIAL_TYPE shader = s->getShaderInfo(shader_index).material;
 
-	RenderStep *effect = pipeline->addStep<PostProcessingStep>(shader, std::vector<u8> { TEXTURE_COLOR, TEXTURE_NORMAL, 0, TEXTURE_DEPTH });
+	u8 source = TEXTURE_COLOR;
+
+	// common downsampling step for bloom or autoexposure
+	if (enable_bloom || enable_auto_exposure) {
+
+		v2f downscale = scale * 0.5;
+		for (u8 i = 0; i < MIPMAP_LEVELS; i++) {
+			buffer->setTexture(TEXTURE_BLOOM_DOWN + i, downscale, std::string("downsample") + std::to_string(i), color_format);
+			if (enable_bloom)
+				buffer->setTexture(TEXTURE_BLOOM_UP + i, downscale, std::string("upsample") + std::to_string(i), color_format);
+			downscale *= 0.5;
+		}
+
+		if (enable_bloom) {
+			buffer->setTexture(TEXTURE_BLOOM, scale, "bloom", color_format);
+
+			// get bright spots
+			u32 shader_id = client->getShaderSource()->getShader("extract_bloom", TILE_MATERIAL_PLAIN, NDT_MESH);
+			RenderStep *extract_bloom = pipeline->addStep<PostProcessingStep>(shader_id, std::vector<u8> { TEXTURE_COLOR, TEXTURE_EXPOSURE_1 });
+			extract_bloom->setRenderSource(buffer);
+			extract_bloom->setRenderTarget(pipeline->createOwned<TextureBufferOutput>(buffer, TEXTURE_BLOOM));
+			source = TEXTURE_BLOOM;
+		}
+
+		// downsample
+		shader_id = client->getShaderSource()->getShader("bloom_downsample", TILE_MATERIAL_PLAIN, NDT_MESH);
+		for (u8 i = 0; i < MIPMAP_LEVELS; i++) {
+			auto step = pipeline->addStep<PostProcessingStep>(shader_id, std::vector<u8> { source });
+			step->setRenderSource(buffer);
+			step->setBilinearFilter(0, true);
+			step->setRenderTarget(pipeline->createOwned<TextureBufferOutput>(buffer, TEXTURE_BLOOM_DOWN + i));
+			source = TEXTURE_BLOOM_DOWN + i;
+		}
+	}
+
+	if (enable_bloom) {
+		// upsample
+		shader_id = client->getShaderSource()->getShader("bloom_upsample", TILE_MATERIAL_PLAIN, NDT_MESH);
+		for (u8 i = MIPMAP_LEVELS - 1; i > 0; i--) {
+			auto step = pipeline->addStep<PostProcessingStep>(shader_id, std::vector<u8> { u8(TEXTURE_BLOOM_DOWN + i - 1), source });
+			step->setRenderSource(buffer);
+			step->setBilinearFilter(0, true);
+			step->setBilinearFilter(1, true);
+			step->setRenderTarget(pipeline->createOwned<TextureBufferOutput>(buffer, u8(TEXTURE_BLOOM_UP + i - 1)));
+			source = TEXTURE_BLOOM_UP + i - 1;
+		}
+	}
+
+	if (enable_auto_exposure) {
+		shader_id = client->getShaderSource()->getShader("update_exposure", TILE_MATERIAL_PLAIN, NDT_MESH);
+		auto update_exposure = pipeline->addStep<PostProcessingStep>(shader_id, std::vector<u8> { TEXTURE_EXPOSURE_1, u8(TEXTURE_BLOOM_DOWN + MIPMAP_LEVELS - 1) });
+		update_exposure->setBilinearFilter(1, true);
+		update_exposure->setRenderSource(buffer);
+		update_exposure->setRenderTarget(pipeline->createOwned<TextureBufferOutput>(buffer, TEXTURE_EXPOSURE_2));
+	}
+
+	// final post-processing
+	shader_id = client->getShaderSource()->getShader("second_stage", TILE_MATERIAL_PLAIN, NDT_MESH);
+	PostProcessingStep *effect = pipeline->createOwned<PostProcessingStep>(shader_id, std::vector<u8> { TEXTURE_COLOR, TEXTURE_BLOOM_UP, TEXTURE_EXPOSURE_2 });
+	pipeline->addStep(effect);
+	effect->setBilinearFilter(1, true); // apply filter to the bloom
 	effect->setRenderSource(buffer);
+
+	if (enable_auto_exposure) {
+		pipeline->addStep<SwapTexturesStep>(buffer, TEXTURE_EXPOSURE_1, TEXTURE_EXPOSURE_2);
+	}
+
 	return effect;
 }

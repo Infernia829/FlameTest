@@ -27,9 +27,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 TextureBuffer::~TextureBuffer()
 {
-	if (m_render_target)
-		m_driver->removeRenderTarget(m_render_target);
-	m_render_target = nullptr;
 	for (u32 index = 0; index < m_textures.size(); index++)
 		m_driver->removeTexture(m_textures[index]);
 	m_textures.clear();
@@ -37,24 +34,19 @@ TextureBuffer::~TextureBuffer()
 
 video::ITexture *TextureBuffer::getTexture(u8 index)
 {
-	if (index == m_depth_texture_index)
-		return m_depth_texture;
 	if (index >= m_textures.size())
 		return nullptr;
 	return m_textures[index];
 }
 
 
-void TextureBuffer::setTexture(u8 index, core::dimension2du size, const std::string &name, video::ECOLOR_FORMAT format)
+void TextureBuffer::setTexture(u8 index, core::dimension2du size, const std::string &name, video::ECOLOR_FORMAT format, bool clear)
 {
 	assert(index != NO_DEPTH_TEXTURE);
 
 	if (m_definitions.size() <= index)
 		m_definitions.resize(index + 1);
 
-	if (m_depth_texture_index == index)
-		m_depth_texture_index = NO_DEPTH_TEXTURE;
-	
 	auto &definition = m_definitions[index];
 	definition.valid = true;
 	definition.dirty = true;
@@ -62,18 +54,16 @@ void TextureBuffer::setTexture(u8 index, core::dimension2du size, const std::str
 	definition.size = size;
 	definition.name = name;
 	definition.format = format;
+	definition.clear = clear;
 }
 
-void TextureBuffer::setTexture(u8 index, v2f scale_factor, const std::string &name, video::ECOLOR_FORMAT format)
+void TextureBuffer::setTexture(u8 index, v2f scale_factor, const std::string &name, video::ECOLOR_FORMAT format, bool clear)
 {
 	assert(index != NO_DEPTH_TEXTURE);
 
 	if (m_definitions.size() <= index)
 		m_definitions.resize(index + 1);
 	
-	if (m_depth_texture_index == index)
-		m_depth_texture_index = NO_DEPTH_TEXTURE;
-
 	auto &definition = m_definitions[index];
 	definition.valid = true;
 	definition.dirty = true;
@@ -81,20 +71,7 @@ void TextureBuffer::setTexture(u8 index, v2f scale_factor, const std::string &na
 	definition.scale_factor = scale_factor;
 	definition.name = name;
 	definition.format = format;
-}
-
-void TextureBuffer::setDepthTexture(u8 index, core::dimension2du size, const std::string &name, video::ECOLOR_FORMAT format)
-{
-	assert(index != NO_DEPTH_TEXTURE);
-	setTexture(index, size, name, format);
-	m_depth_texture_index = index;
-}
-
-void TextureBuffer::setDepthTexture(u8 index, v2f scale_factor, const std::string &name, video::ECOLOR_FORMAT format)
-{
-	assert(index != NO_DEPTH_TEXTURE);
-	setTexture(index, scale_factor, name, format);
-	m_depth_texture_index = index;
+	definition.clear = clear;
 }
 
 void TextureBuffer::reset(PipelineContext &context)
@@ -116,42 +93,25 @@ void TextureBuffer::reset(PipelineContext &context)
 		m_textures.push_back(nullptr);
 
 	// change textures to match definitions
-	bool modified = false;
 	for (u32 i = 0; i < m_definitions.size(); i++) {
 		video::ITexture **ptr = &m_textures[i];
-		if (i == m_depth_texture_index) {
-			if (*ptr) {
-				m_driver->removeTexture(*ptr);
-				*ptr = nullptr;
-			}
-			ptr = &m_depth_texture;
-		}
 
-		if (ensureTexture(ptr, m_definitions[i], context))
-			modified = true;
+		ensureTexture(ptr, m_definitions[i], context);
 		m_definitions[i].dirty = false;
 	}
 	
-	// make sude depth texture is removed and reset
-	if (m_depth_texture_index == NO_DEPTH_TEXTURE && m_depth_texture) {
-		m_driver->removeTexture(m_depth_texture);
-		m_depth_texture = nullptr;
-	}
-
-	if (!m_render_target)
-		m_render_target = m_driver->addRenderTarget();
-
-	if (modified)
-		m_render_target->setTexture(m_textures, m_depth_texture);
-
-	RenderTarget::reset(context);
+	RenderSource::reset(context);
 }
 
-void TextureBuffer::activate(PipelineContext &context)
+void TextureBuffer::swapTextures(u8 texture_a, u8 texture_b)
 {
-	m_driver->setRenderTargetEx(m_render_target, m_clear ? video::ECBF_DEPTH | video::ECBF_COLOR : 0, context.clear_color);
-	RenderTarget::activate(context);
+	assert(m_definitions[texture_a].valid && m_definitions[texture_b].valid);
+
+	video::ITexture *temp = m_textures[texture_a];
+	m_textures[texture_a] = m_textures[texture_b];
+	m_textures[texture_b] = temp;
 }
+
 
 bool TextureBuffer::ensureTexture(video::ITexture **texture, const TextureDefinition& definition, PipelineContext &context)
 {
@@ -177,24 +137,75 @@ bool TextureBuffer::ensureTexture(video::ITexture **texture, const TextureDefini
 	if (*texture)
 		m_driver->removeTexture(*texture);
 
-	if (definition.valid)
-		*texture = m_driver->addRenderTargetTexture(size, definition.name.c_str(), definition.format);
-	else
+	if (definition.valid) {
+		if (definition.clear) {
+			video::IImage *image = m_driver->createImage(definition.format, size);
+			// Cannot use image->fill because it's not implemented for all formats.
+			std::memset(image->getData(), 0, image->getDataSizeFromFormat(definition.format, size.Width, size.Height));
+			*texture = m_driver->addTexture(definition.name.c_str(), image);
+			image->drop();
+		}
+		else {
+			*texture = m_driver->addRenderTargetTexture(size, definition.name.c_str(), definition.format);
+		}
+	}
+	else {
 		*texture = nullptr;
+	}
 
 	return true;
 }
 
 TextureBufferOutput::TextureBufferOutput(TextureBuffer *_buffer, u8 _texture_index)
-	: buffer(_buffer), texture_index(_texture_index)
+	: buffer(_buffer), texture_map({_texture_index})
 {}
+
+TextureBufferOutput::TextureBufferOutput(TextureBuffer *_buffer, const std::vector<u8> &_texture_map)
+	: buffer(_buffer), texture_map(_texture_map)
+{}
+
+TextureBufferOutput::TextureBufferOutput(TextureBuffer *_buffer, const std::vector<u8> &_texture_map, u8 _depth_stencil)
+	: buffer(_buffer), texture_map(_texture_map), depth_stencil(_depth_stencil)
+{}
+
+TextureBufferOutput::~TextureBufferOutput()
+{
+	if (render_target && driver)
+		driver->removeRenderTarget(render_target);
+}
 
 void TextureBufferOutput::activate(PipelineContext &context)
 {
-	auto texture = buffer->getTexture(texture_index);
-	auto driver = context.device->getVideoDriver();
-	driver->setRenderTarget(texture, m_clear, m_clear, context.clear_color);
-	driver->OnResize(texture->getSize());
+	if (!driver)
+		driver = context.device->getVideoDriver();
+
+	if (!render_target)
+		render_target = driver->addRenderTarget();
+
+	core::array<video::ITexture *> textures;
+	core::dimension2du size(0, 0);
+	for (size_t i = 0; i < texture_map.size(); i++) {
+		video::ITexture *texture = buffer->getTexture(texture_map[i]);
+		textures.push_back(texture);
+		if (texture && size.Width == 0)
+			size = texture->getSize();
+	}
+
+	// Use legacy call when there's single texture without depth texture
+	// This binds default depth buffer to the FBO
+	if (textures.size() == 1 && depth_stencil == NO_DEPTH_TEXTURE) {
+		driver->setRenderTarget(textures[0], m_clear, m_clear, context.clear_color);
+		return;
+	}
+
+	video::ITexture *depth_texture = nullptr;
+	if (depth_stencil != NO_DEPTH_TEXTURE)
+		depth_texture = buffer->getTexture(depth_stencil);
+
+	render_target->setTexture(textures, depth_texture);
+
+	driver->setRenderTargetEx(render_target, m_clear ? video::ECBF_ALL : video::ECBF_NONE, context.clear_color);
+	driver->OnResize(size);
 
 	RenderTarget::activate(context);
 }
@@ -240,6 +251,16 @@ SetRenderTargetStep::SetRenderTargetStep(RenderStep *_step, RenderTarget *_targe
 void SetRenderTargetStep::run(PipelineContext &context)
 {
 	step->setRenderTarget(target);
+}
+
+SwapTexturesStep::SwapTexturesStep(TextureBuffer *_buffer, u8 _texture_a, u8 _texture_b)
+		: buffer(_buffer), texture_a(_texture_a), texture_b(_texture_b)
+{
+}
+
+void SwapTexturesStep::run(PipelineContext &context)
+{
+	buffer->swapTextures(texture_a, texture_b);
 }
 
 RenderSource *RenderPipeline::getInput()

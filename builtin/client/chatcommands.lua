@@ -69,13 +69,6 @@ core.register_chatcommand("clear_chat_queue", {
 	end,
 })
 
-core.register_chatcommand("interval", {
-	description = core.gettext("Toggle fast placement interval"),
-	func = function(param)
-		return true, core.gettext("Slow placement interval is")
-	end,
-})
-
 function core.run_server_chatcommand(cmd, param)
 	core.send_chat_message("/" .. cmd .. " " .. param)
 end

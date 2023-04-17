@@ -39,6 +39,13 @@ void Draw3D::run(PipelineContext &context)
 		return;
 	context.hud->drawBlockBounds();
 	context.hud->drawSelectionMesh();
+}
+
+void DrawWield::run(PipelineContext &context)
+{
+	if (m_target)
+		m_target->activate(context);
+
 	if (context.draw_wield_tool)
 		context.client->getCamera()->drawWieldedTool();
 }
@@ -48,6 +55,8 @@ void DrawHUD::run(PipelineContext &context)
 	if (context.show_hud) {
 		if (context.shadow_renderer)
 			context.shadow_renderer->drawDebug();
+
+		context.hud->resizeHotbar();
 
 		if (context.draw_crosshair)
 			context.hud->drawCrosshair();
@@ -108,7 +117,7 @@ std::unique_ptr<RenderStep> create3DStage(Client *client, v2f scale)
 	return std::unique_ptr<RenderStep>(step);
 }
 
-v2f getDownscaleFactor()
+static v2f getDownscaleFactor()
 {
 	u16 undersampling = MYMAX(g_settings->getU16("undersampling"), 1);
 	return v2f(1.0f / undersampling);
@@ -142,6 +151,7 @@ void populatePlainPipeline(RenderPipeline *pipeline, Client *client)
 	auto downscale_factor = getDownscaleFactor();
 	auto step3D = pipeline->own(create3DStage(client, downscale_factor));
 	pipeline->addStep(step3D);
+	pipeline->addStep<DrawWield>();
 	pipeline->addStep<MapPostFxStep>();
 
 	step3D = addUpscaling(pipeline, step3D, downscale_factor);
