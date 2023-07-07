@@ -497,6 +497,19 @@ bloom_strength_factor (Bloom Strength Factor) float 1.0 0.1 10.0
 #    Range: from 0.1 to 8, default: 1
 bloom_radius (Bloom Radius) float 1 0.1 8
 
+[*Sky]
+
+#    Force Custom Skybox
+force_custom_skybox (Force Custom Skybox) bool false
+#    Use Custom Skybox
+custom_skybox (Use Custom Skybox) bool true
+#    Display Sunrises
+display_sunrise (Display Sunrise) bool false
+#    Force Render Skybox
+force_render_skybox (Force Render Skybox) bool true
+
+
+
 
 [*Audio]
 
