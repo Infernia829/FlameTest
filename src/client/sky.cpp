@@ -394,9 +394,16 @@ void Sky::update(float time_of_day, float time_brightness,
 
 	m_time_of_day = time_of_day;
 	m_time_brightness = time_brightness;
+	try {
+		if (g_settings->getBool("force_render_skybox") == true)
+		{
+			sunlight_seen = true;
+		}
+	} catch(...) {}
+	
 	m_sunlight_seen = sunlight_seen;
 	m_in_clouds = false;
-
+	
 	bool is_dawn = (time_brightness >= 0.20 && time_brightness < 0.35);
 
 	video::SColorf bgcolor_bright_normal_f = m_sky_params.sky_color.day_horizon;
@@ -428,6 +435,7 @@ void Sky::update(float time_of_day, float time_brightness,
 
 	m_clouds_visible = true;
 	float color_change_fraction = 0.98f;
+	
 	if (sunlight_seen) {
 		if (is_dawn) { // Dawn
 			m_bgcolor_bright_f = m_bgcolor_bright_f.getInterpolated(
