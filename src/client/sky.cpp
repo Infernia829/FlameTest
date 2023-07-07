@@ -35,6 +35,23 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 using namespace irr::core;
 
+std::string get_texture(int id)
+{
+	if (id==0)
+		return g_settings->get("sky_texture_top");
+	if (id==1)
+		return g_settings->get("sky_texture_bottom");
+	if (id==2)
+		return g_settings->get("sky_texture_east");
+	if (id==3)
+		return g_settings->get("sky_texture_west");
+	if (id==4)
+		return g_settings->get("sky_texture_south");
+	if (id==5)
+		return g_settings->get("sky_texture_north");
+	return "default_stone.png";
+}
+
 static video::SMaterial baseMaterial()
 {
 	video::SMaterial mat;
@@ -85,15 +102,39 @@ Sky::Sky(s32 id, RenderingEngine *rendering_engine, ITextureSource *tsrc, IShade
 	m_materials[2] = baseMaterial();
 	m_materials[2].setTexture(0, tsrc->getTextureForMesh("sunrisebg.png"));
 	m_materials[2].MaterialType = video::EMT_TRANSPARENT_ALPHA_CHANNEL;
+	
 
 	setSunTexture(m_sun_params.texture, m_sun_params.tonemap, tsrc);
 
 	setMoonTexture(m_moon_params.texture, m_moon_params.tonemap, tsrc);
-
-	for (int i = 5; i < 11; i++) {
-		m_materials[i] = baseMaterial();
-		m_materials[i].Lighting = true;
-		m_materials[i].MaterialType = video::EMT_SOLID;
+	if (g_settings->getBool("custom_skybox") == true)
+	{
+		for (int i = 5; i < 11; i++) {
+			m_visible = false;
+			m_materials[i] = baseMaterial();
+			m_materials[i].Lighting = true;
+			try {
+				m_sky_params.textures.emplace_back(get_texture(i-5));
+				video::ITexture *result = tsrc->getTextureForMesh(get_texture(i-5));
+				m_materials[i] = baseMaterial();
+				m_materials[i].setTexture(0, result);
+				m_materials[i].MaterialType = video::EMT_SOLID;
+			} catch(...) {
+				m_sky_params.textures.emplace_back("no texture");
+				video::ITexture *result = tsrc->getTextureForMesh("no texture");
+				m_materials[i] = baseMaterial();
+				m_materials[i].setTexture(0, result);
+				m_materials[i].MaterialType = video::EMT_SOLID;
+			}
+		}
+	}
+	else
+	{
+		for (int i = 5; i < 11; i++) {
+			m_materials[i] = baseMaterial();
+			m_materials[i].Lighting = true;
+			m_materials[i].MaterialType = video::EMT_SOLID;
+		}
 	}
 
 	m_directional_colored_fog = g_settings->getBool("directional_colored_fog");
@@ -195,6 +236,7 @@ void Sky::render()
 		if (m_sky_params.textures.size() == 6) {
 			for (u32 j = 5; j < 11; j++) {
 				video::SColor c(255, 255, 255, 255);
+				
 				driver->setMaterial(m_materials[j]);
 				// Use 1.05 rather than 1.0 to avoid colliding with the
 				// sun, moon and stars, as this is a background skybox.
@@ -257,6 +299,10 @@ void Sky::render()
 
 		// Draw sunrise/sunset horizon glow texture
 		// (textures/base/pack/sunrisebg.png)
+		if (g_settings->getBool("display_sunrise") == false)
+		{
+			m_sun_params.sunrise_visible = false;
+		}
 		if (m_sun_params.sunrise_visible) {
 			driver->setMaterial(m_materials[2]);
 			float mid1 = 0.25;
@@ -883,18 +929,38 @@ void Sky::setHorizonTint(video::SColor sun_tint, video::SColor moon_tint,
 		m_default_tint = true;
 }
 
-void Sky::addTextureToSkybox(const std::string &texture, int material_id,
-		ITextureSource *tsrc)
+void Sky::addTextureToSkybox(const std::string& texture, int material_id, ITextureSource* tsrc)
 {
-	// Sanity check for more than six textures.
-	if (material_id + 5 >= SKY_MATERIAL_COUNT)
-		return;
-	// Keep a list of texture names handy.
-	m_sky_params.textures.emplace_back(texture);
-	video::ITexture *result = tsrc->getTextureForMesh(texture);
-	m_materials[material_id+5] = baseMaterial();
-	m_materials[material_id+5].setTexture(0, result);
-	m_materials[material_id+5].MaterialType = video::EMT_SOLID;
+    // Sanity check for more than six textures.
+    if (g_settings->getBool("force_custom_skybox"))
+    {
+		try {
+			m_sky_params.textures.emplace_back(get_texture(material_id));
+        	video::ITexture* result = tsrc->getTextureForMesh(get_texture(material_id));
+        	m_materials[material_id + 5] = baseMaterial();
+        	m_materials[material_id + 5].setTexture(0, result);
+        	m_materials[material_id + 5].MaterialType = video::EMT_SOLID;
+		} catch(...) {
+			m_sky_params.textures.emplace_back("no texture");
+        	video::ITexture* result = tsrc->getTextureForMesh("no texture");
+        	m_materials[material_id + 5] = baseMaterial();
+        	m_materials[material_id + 5].setTexture(0, result);
+        	m_materials[material_id + 5].MaterialType = video::EMT_SOLID;
+		}
+        
+    }
+    else
+    {
+        if (material_id + 5 >= SKY_MATERIAL_COUNT)
+            return;
+
+        // Keep a list of texture names handy.
+        m_sky_params.textures.emplace_back(texture);
+        video::ITexture* result = tsrc->getTextureForMesh(texture);
+        m_materials[material_id + 5] = baseMaterial();
+        m_materials[material_id + 5].setTexture(0, result);
+        m_materials[material_id + 5].MaterialType = video::EMT_SOLID;
+    }
 }
 
 float getWickedTimeOfDay(float time_of_day)
